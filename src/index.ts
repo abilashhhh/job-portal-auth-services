@@ -46,7 +46,7 @@ async function initDb() {
             PRIMARY KEY (user_id, skill_id)
     )`;
 
-    console.log("✅ Database initialized successfully (tables created");
+    console.log("✅ Database initialized successfully (tables created)");
   } catch (error) {
     console.error("❌ Error initializing database initDb", error);
     process.exit(1);

@@ -98,8 +98,6 @@ export const loginUser = TryCatch(async (req, res, next) => {
   );
   if (!matchPassword) throw new ErrorHandler(400, "Invalid credentials");
 
-
-  
   userObject.skills = userObject.skills || [];
   delete userObject.password;
 
