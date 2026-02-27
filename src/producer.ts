@@ -34,3 +34,25 @@ export const connectKafka = async () => {
     console.error("Failed to connect to Kafka:", error.message);
   }
 };
+
+export const publishToTopic = async (topic: string, message: any) => {
+  if (!producer) {
+    console.log("Kafka producer not initialized");
+    return;
+  }
+
+  try {
+    await producer.send({
+      topic,
+      messages: [{ value: JSON.stringify(message) }],
+    });
+  } catch (error: any) {
+    console.error("Failed to publish message to Kafka topic:", error.message);
+  }
+};
+
+export const disconnectKafka = async () => {
+  if (producer) {
+    producer.disconnect();
+  }
+};

@@ -5,6 +5,8 @@ import { TryCatch } from "../utils/TryCatch.js";
 import bcrypt from "bcrypt";
 import axios from "axios";
 import jwt from "jsonwebtoken";
+import { forgotPasswordTemplate } from "../templates.js";
+import { publishToTopic } from "../producer.js";
 
 export const registerUser = TryCatch(async (req, res, next) => {
   const { name, email, password, phone_number, role, bio } = req.body;
@@ -108,4 +110,47 @@ export const loginUser = TryCatch(async (req, res, next) => {
   );
 
   res.json({ message: "User logged in successfully", userObject, token });
+});
+
+export const forgotPassword = TryCatch(async (req, res, next) => {
+  const { email } = req.body;
+  if (!email) throw new ErrorHandler(400, "Email is required");
+
+  const users =
+    await sql`SELECT user_id, email, name FROM users WHERE email = ${email}`;
+
+  if (users.length === 0) {
+    return res.json({
+      message:
+        "If an account with that email exists, a password reset link has been sent",
+    });
+  }
+
+  const user = users[0];
+
+  const resetToken = jwt.sign(
+    { email: user.email, type: "reset" },
+    process.env.JWT_SECRET as string,
+    { expiresIn: "15m" },
+  );
+
+  const resetLink = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+
+  const message = {
+    to: email,
+    subject: "Password Reset Request",
+    html: forgotPasswordTemplate(resetLink),
+  };
+
+  publishToTopic("send-mail", message).catch((error) => {
+    console.error(
+      "Failed to publish password reset email to Kafka topic:",
+      error,
+    );
+  });
+
+  res.json({
+    message:
+      "If an account with that email exists, a password reset link has been sent",
+  });
 });
