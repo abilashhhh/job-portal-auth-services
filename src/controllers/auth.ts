@@ -7,6 +7,7 @@ import axios from "axios";
 import jwt from "jsonwebtoken";
 import { forgotPasswordTemplate } from "../templates.js";
 import { publishToTopic } from "../producer.js";
+import { redisClient } from "../index.js";
 
 export const registerUser = TryCatch(async (req, res, next) => {
   const { name, email, password, phone_number, role, bio } = req.body;
@@ -136,6 +137,8 @@ export const forgotPassword = TryCatch(async (req, res, next) => {
 
   const resetLink = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
 
+  await redisClient.set(`forgot-password:${email}`, resetToken, { EX: 900 });
+
   const message = {
     to: email,
     subject: "Password Reset Request",
@@ -153,4 +156,36 @@ export const forgotPassword = TryCatch(async (req, res, next) => {
     message:
       "If an account with that email exists, a password reset link has been sent",
   });
+});
+
+export const resetPassword = TryCatch(async (req, res, next) => {
+  const { token } = req.params;
+  const { password } = req.body;
+
+  let decoded: any;
+  try {
+    decoded = jwt.verify(token as string, process.env.JWT_SECRET as string);
+  } catch (error) {
+    throw new ErrorHandler(400, "Invalid or expired token");
+  }
+
+  if (decoded.type !== "reset")
+    throw new ErrorHandler(400, "Invalid token type");
+
+  const email = decoded.email;
+  const storedToken = await redisClient.get(`forgot-password:${email}`);
+
+  if (!storedToken || storedToken !== token)
+    throw new ErrorHandler(400, "Invalid or expired token");
+
+  const users = await sql`SELECT user_id FROM users WHERE email = ${email}`;
+  if (users.length === 0) throw new ErrorHandler(404, "User not found");
+
+  const user = users[0];
+  const hashPassword = await bcrypt.hash(password, 10);
+
+  await sql`UPDATE users SET password = ${hashPassword} WHERE user_id = ${user.user_id}`;
+  await redisClient.del(`forgot-password:${email}`);
+
+  res.json({ message: "Password reset successfully" });
 });
